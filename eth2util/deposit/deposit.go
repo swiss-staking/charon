@@ -23,7 +23,7 @@ var (
 	eth1AddressWithdrawalPrefix = []byte{0x01}
 
 	// the amount of ether in gwei required to activate a validator.
-	validatorAmt = eth2p0.Gwei(32000000000)
+	validatorAmt = eth2p0.Gwei(1000000000)
 
 	// DOMAIN_DEPOSIT. See spec: https://benjaminion.xyz/eth2-annotated-spec/phase0/beacon-chain/#domain-types
 	depositDomainType = eth2p0.DomainType([4]byte{0x03, 0x00, 0x00, 0x00})

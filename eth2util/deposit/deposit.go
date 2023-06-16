@@ -165,7 +165,7 @@ func MarshalDepositData2(depositDatas []eth2p0.DepositData, network string) ([]b
 		ddList = append(ddList, depositDataJSON{
 			PubKey:                fmt.Sprintf("%x", depositData.PublicKey),
 			WithdrawalCredentials: fmt.Sprintf("%x", depositData.WithdrawalCredentials),
-			Amount:                uint64(validatorAmt1),
+			Amount:                uint64(validatorAmt31),
 			Signature:             fmt.Sprintf("%x", depositData.Signature),
 			DepositMessageRoot:    fmt.Sprintf("%x", msgRoot),
 			DepositDataRoot:       fmt.Sprintf("%x", dataRoot),

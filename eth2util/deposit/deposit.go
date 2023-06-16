@@ -42,9 +42,24 @@ func NewMessage(pubkey eth2p0.BLSPubKey, withdrawalAddr string) (eth2p0.DepositM
 	return eth2p0.DepositMessage{
 		PublicKey:             pubkey,
 		WithdrawalCredentials: creds[:],
-		Amount:                validatorAmt,
+		Amount:                validatorAmt1,
 	}, nil
 }
+
+// NewMessage returns a deposit message created using the provided parameters.
+func NewMessage2(pubkey eth2p0.BLSPubKey, withdrawalAddr string) (eth2p0.DepositMessage, error) {
+	creds, err := withdrawalCredsFromAddr(withdrawalAddr)
+	if err != nil {
+		return eth2p0.DepositMessage{}, err
+	}
+
+	return eth2p0.DepositMessage{
+		PublicKey:             pubkey,
+		WithdrawalCredentials: creds[:],
+		Amount:                validatorAmt1,
+	}, nil
+}
+
 
 // MarshalDepositData serializes a list of deposit data into a single file.
 func MarshalDepositData(depositDatas []eth2p0.DepositData, network string) ([]byte, error) {
@@ -87,7 +102,70 @@ func MarshalDepositData(depositDatas []eth2p0.DepositData, network string) ([]by
 		ddList = append(ddList, depositDataJSON{
 			PubKey:                fmt.Sprintf("%x", depositData.PublicKey),
 			WithdrawalCredentials: fmt.Sprintf("%x", depositData.WithdrawalCredentials),
-			Amount:                uint64(validatorAmt),
+			Amount:                uint64(validatorAmt1),
+			Signature:             fmt.Sprintf("%x", depositData.Signature),
+			DepositMessageRoot:    fmt.Sprintf("%x", msgRoot),
+			DepositDataRoot:       fmt.Sprintf("%x", dataRoot),
+			ForkVersion:           strings.TrimPrefix(forkVersion, "0x"),
+			NetworkName:           network,
+			DepositCliVersion:     depositCliVersion,
+		})
+	}
+
+	sort.Slice(ddList, func(i, j int) bool {
+		return ddList[i].PubKey < ddList[j].PubKey
+	})
+
+	bytes, err := json.MarshalIndent(ddList, "", " ")
+	if err != nil {
+		return nil, errors.Wrap(err, "marshal deposit data")
+	}
+
+	return bytes, nil
+}
+
+// MarshalDepositData serializes a list of deposit data into a single file.
+func MarshalDepositData2(depositDatas []eth2p0.DepositData, network string) ([]byte, error) {
+	forkVersion, err := eth2util.NetworkToForkVersion(network)
+	if err != nil {
+		return nil, err
+	}
+
+	var ddList []depositDataJSON
+	for _, depositData := range depositDatas {
+		msg := eth2p0.DepositMessage{
+			PublicKey:             depositData.PublicKey,
+			WithdrawalCredentials: depositData.WithdrawalCredentials,
+			Amount:                depositData.Amount,
+		}
+		msgRoot, err := msg.HashTreeRoot()
+		if err != nil {
+			return nil, err
+		}
+
+		// Verify deposit data signature
+		sigData, err := GetMessageSigningRoot(msg, network)
+		if err != nil {
+			return nil, err
+		}
+
+		blsSig := tbls.Signature(depositData.Signature)
+		blsPubkey := tbls.PublicKey(depositData.PublicKey)
+
+		err = tbls.Verify(blsPubkey, sigData[:], blsSig)
+		if err != nil {
+			return nil, errors.Wrap(err, "invalid deposit data signature")
+		}
+
+		dataRoot, err := depositData.HashTreeRoot()
+		if err != nil {
+			return nil, errors.Wrap(err, "deposit data hash root")
+		}
+
+		ddList = append(ddList, depositDataJSON{
+			PubKey:                fmt.Sprintf("%x", depositData.PublicKey),
+			WithdrawalCredentials: fmt.Sprintf("%x", depositData.WithdrawalCredentials),
+			Amount:                uint64(validatorAmt1),
 			Signature:             fmt.Sprintf("%x", depositData.Signature),
 			DepositMessageRoot:    fmt.Sprintf("%x", msgRoot),
 			DepositDataRoot:       fmt.Sprintf("%x", dataRoot),

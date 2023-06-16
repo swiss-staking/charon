@@ -56,7 +56,7 @@ func NewMessage2(pubkey eth2p0.BLSPubKey, withdrawalAddr string) (eth2p0.Deposit
 	return eth2p0.DepositMessage{
 		PublicKey:             pubkey,
 		WithdrawalCredentials: creds[:],
-		Amount:                validatorAmt1,
+		Amount:                validatorAmt31,
 	}, nil
 }
 

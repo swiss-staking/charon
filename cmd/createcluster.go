@@ -556,7 +556,6 @@ func createDepositDatas2(withdrawalAddresses []string, network string, secrets [
 func writeDepositData(depositDatas []eth2p0.DepositData, network string, clusterDir string, numNodes int) error {
 	// Serialize the deposit data into bytes
 
-	depositDatas.amount = 
 	bytes, err := deposit.MarshalDepositData(depositDatas, network)
 	if err != nil {
 		return err
@@ -577,7 +576,6 @@ func writeDepositData(depositDatas []eth2p0.DepositData, network string, cluster
 func writeDepositData2(depositDatas []eth2p0.DepositData, network string, clusterDir string, numNodes int) error {
 	// Serialize the deposit data into bytes
 
-	depositDatas.amount = 
 	bytes, err := deposit.MarshalDepositData2(depositDatas, network)
 	if err != nil {
 		return err

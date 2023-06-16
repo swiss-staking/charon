@@ -244,8 +244,17 @@ func runCreateCluster(ctx context.Context, w io.Writer, conf clusterConfig) erro
 		return err
 	}
 
+	depositDatas2, err := createDepositDatas2(def.WithdrawalAddresses(), network, secrets)
+	if err != nil {
+		return err
+	}
+
 	// Write deposit-data file
 	if err = writeDepositData(depositDatas, network, conf.ClusterDir, numNodes); err != nil {
+		return err
+	}
+
+	if err = writeDepositData2(depositDatas2, network, conf.ClusterDir, numNodes); err != nil {
 		return err
 	}
 
@@ -324,6 +333,50 @@ func signDepositDatas(secrets []tbls.PrivateKey, withdrawalAddresses []string, n
 		}
 
 		msg, err := deposit.NewMessage(eth2p0.BLSPubKey(pk), withdrawalAddr)
+		if err != nil {
+			return nil, err
+		}
+
+		sigRoot, err := deposit.GetMessageSigningRoot(msg, network)
+		if err != nil {
+			return nil, err
+		}
+
+		sig, err := tbls.Sign(secret, sigRoot[:])
+		if err != nil {
+			return nil, err
+		}
+
+		datas = append(datas, eth2p0.DepositData{
+			PublicKey:             msg.PublicKey,
+			WithdrawalCredentials: msg.WithdrawalCredentials,
+			Amount:                msg.Amount,
+			Signature:             tblsconv.SigToETH2(sig),
+		})
+	}
+
+	return datas, nil
+}
+
+// signDepositDatas returns Distributed Validator pubkeys and deposit data signatures corresponding to each pubkey.
+func signDepositDatas2(secrets []tbls.PrivateKey, withdrawalAddresses []string, network string) ([]eth2p0.DepositData, error) {
+	if len(secrets) != len(withdrawalAddresses) {
+		return nil, errors.New("insufficient withdrawal addresses")
+	}
+
+	var datas []eth2p0.DepositData
+	for i, secret := range secrets {
+		withdrawalAddr, err := eth2util.ChecksumAddress(withdrawalAddresses[i])
+		if err != nil {
+			return nil, err
+		}
+
+		pk, err := tbls.SecretToPublicKey(secret)
+		if err != nil {
+			return nil, errors.Wrap(err, "secret to pubkey")
+		}
+
+		msg, err := deposit.NewMessage2(eth2p0.BLSPubKey(pk), withdrawalAddr)
 		if err != nil {
 			return nil, err
 		}
@@ -490,9 +543,20 @@ func createDepositDatas(withdrawalAddresses []string, network string, secrets []
 	return signDepositDatas(secrets, withdrawalAddresses, network)
 }
 
+// createDepositDatas creates a slice of deposit datas using the provided parameters and returns it.
+func createDepositDatas2(withdrawalAddresses []string, network string, secrets []tbls.PrivateKey) ([]eth2p0.DepositData, error) {
+	if len(secrets) != len(withdrawalAddresses) {
+		return nil, errors.New("insufficient withdrawal addresses")
+	}
+
+	return signDepositDatas2(secrets, withdrawalAddresses, network)
+}
+
 // writeDepositData writes deposit data to disk for the DVs for all peers in a cluster.
 func writeDepositData(depositDatas []eth2p0.DepositData, network string, clusterDir string, numNodes int) error {
 	// Serialize the deposit data into bytes
+
+	depositDatas.amount = 
 	bytes, err := deposit.MarshalDepositData(depositDatas, network)
 	if err != nil {
 		return err
@@ -503,6 +567,27 @@ func writeDepositData(depositDatas []eth2p0.DepositData, network string, cluster
 		err = os.WriteFile(depositPath, bytes, 0o400) // read-only
 		if err != nil {
 			return errors.Wrap(err, "write deposit data")
+		}
+	}
+
+	return nil
+}
+
+// writeDepositData writes deposit data to disk for the DVs for all peers in a cluster.
+func writeDepositData2(depositDatas []eth2p0.DepositData, network string, clusterDir string, numNodes int) error {
+	// Serialize the deposit data into bytes
+
+	depositDatas.amount = 
+	bytes, err := deposit.MarshalDepositData2(depositDatas, network)
+	if err != nil {
+		return err
+	}
+
+	for i := 0; i < numNodes; i++ {
+		depositPath := path.Join(nodeDir(clusterDir, i), "deposit-data-2.json")
+		err = os.WriteFile(depositPath, bytes, 0o400) // read-only
+		if err != nil {
+			return errors.Wrap(err, "write deposit data 2")
 		}
 	}
 

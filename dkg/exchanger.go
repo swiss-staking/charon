@@ -98,6 +98,36 @@ func (e *exchanger) exchange(ctx context.Context, sigType sigType, set core.ParS
 	return sets, nil
 }
 
+func (e *exchanger) exchange2(ctx context.Context, sigType sigType, set core.ParSignedDataSet) (map[core.PubKey][]core.ParSignedData, error) {
+	// Start the process by storing current peer's ParSignedDataSet
+	duty := core.NewSignatureDuty(int64(sigType))
+	err := e.sigdb.StoreInternal2(ctx, duty, set)
+	if err != nil {
+		return nil, err
+	}
+
+	sets := make(map[core.PubKey][]core.ParSignedData)
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case peerSet := <-e.sigChan:
+			if sigType != peerSet.sigType {
+				// Do nothing if duty doesn't match
+				continue
+			}
+			sets[peerSet.pubkey] = peerSet.psigs
+		}
+
+		// We are done when we have ParSignedData of all the DVs from all each peer
+		if len(sets) == e.numVals {
+			break
+		}
+	}
+
+	return sets, nil
+}
+
 // pushPsigs is responsible for writing partial signature data to sigChan obtained from other peers.
 func (e *exchanger) pushPsigs(_ context.Context, duty core.Duty, pk core.PubKey, psigs []core.ParSignedData) error {
 	e.sigChan <- sigData{

@@ -239,6 +239,11 @@ func Run(ctx context.Context, conf Config) (err error) {
 		return err
 	}
 
+	depositDatas2, err := signAndAggDepositData2(ctx, ex, shares, def.WithdrawalAddresses(), network, nodeIdx)
+	if err != nil {
+		return err
+	}
+
 	log.Debug(ctx, "Aggregated deposit data signatures")
 
 	// Sign, exchange and aggregate builder validator registration signatures.
@@ -310,6 +315,11 @@ func Run(ctx context.Context, conf Config) (err error) {
 		return err
 	}
 	log.Debug(ctx, "Saved deposit data file to disk")
+
+	if err := writeDepositData(depositDatas2, network, conf.DataDir); err != nil {
+		return err
+	}
+	log.Debug(ctx, "Saved deposit data 2 file to disk")
 
 	// TODO(corver): Improve graceful shutdown, see https://github.com/ObolNetwork/charon/issues/887
 	if conf.TestConfig.ShutdownCallback != nil {
@@ -520,7 +530,7 @@ func signAndAggLockHash(ctx context.Context, shares []share, def cluster.Definit
 func signAndAggDepositData(ctx context.Context, ex *exchanger, shares []share, withdrawalAddresses []string,
 	network string, nodeIdx cluster.NodeIdx,
 ) ([]eth2p0.DepositData, error) {
-	parSig, despositMsgs, err := signDepositMsgs(shares, nodeIdx.ShareIdx, withdrawalAddresses, network)
+	parSig, despositMsgs, err := signDepositMsgs(shares, nodeIdx.ShareIdx, withdrawalAddresses, network) //GV calling this twice?
 	if err != nil {
 		return nil, err
 	}
@@ -531,6 +541,22 @@ func signAndAggDepositData(ctx context.Context, ex *exchanger, shares []share, w
 	}
 
 	return aggDepositData(peerSigs, shares, despositMsgs, network)
+}
+
+func signAndAggDepositData2(ctx context.Context, ex *exchanger, shares []share, withdrawalAddresses []string,
+	network string, nodeIdx cluster.NodeIdx,
+) ([]eth2p0.DepositData, error) {
+	parSig, despositMsgs, err := signDepositMsgs2(shares, nodeIdx.ShareIdx, withdrawalAddresses, network) //GV calling this twice?
+	if err != nil {
+		return nil, err
+	}
+
+	peerSigs, err := ex.exchange2(ctx, sigDepositData, parSig) //ERROR
+	if err != nil {
+		return nil, err
+	}
+
+	return aggDepositData2(peerSigs, shares, despositMsgs, network)
 }
 
 // signAndAggValidatorRegistrations returns the pre-generated validator registrations objects after signing, exchange and aggregation of partial signatures.
@@ -627,7 +653,7 @@ func signLockHash(shareIdx int, shares []share, hash []byte) (core.ParSignedData
 
 // signDepositMsgs returns a partially signed dataset containing signatures of the deposit message signing root.
 func signDepositMsgs(shares []share, shareIdx int, withdrawalAddresses []string, network string) (core.ParSignedDataSet, map[core.PubKey]eth2p0.DepositMessage, error) {
-	msgs := make(map[core.PubKey]eth2p0.DepositMessage)
+	msgs := make(map[core.PubKey]eth2p0.DepositMessage) //GV make DepositMSG
 	set := make(core.ParSignedDataSet)
 	for i, share := range shares {
 		withdrawalHex, err := eth2util.ChecksumAddress(withdrawalAddresses[i])
@@ -644,7 +670,52 @@ func signDepositMsgs(shares []share, shareIdx int, withdrawalAddresses []string,
 			return nil, nil, err
 		}
 
-		msg, err := deposit.NewMessage(pubkey, withdrawalHex)
+		msg, err := deposit.NewMessage(pubkey, withdrawalHex) //GVNewMessage2
+		if err != nil {
+			return nil, nil, err
+		}
+
+		sigRoot, err := deposit.GetMessageSigningRoot(msg, network)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		sig, err := tbls.Sign(share.SecretShare, sigRoot[:])
+		if err != nil {
+			return nil, nil, err
+		}
+
+		set[pk] = core.NewPartialSignature(tblsconv.SigToCore(sig), shareIdx)
+		msgs[pk] = eth2p0.DepositMessage{
+			PublicKey:             msg.PublicKey,
+			WithdrawalCredentials: msg.WithdrawalCredentials,
+			Amount:                msg.Amount,
+		}
+	}
+
+	return set, msgs, nil
+}
+
+// signDepositMsgs returns a partially signed dataset containing signatures of the deposit message signing root.
+func signDepositMsgs2(shares []share, shareIdx int, withdrawalAddresses []string, network string) (core.ParSignedDataSet, map[core.PubKey]eth2p0.DepositMessage, error) {
+	msgs := make(map[core.PubKey]eth2p0.DepositMessage) //GV make DepositMSG
+	set := make(core.ParSignedDataSet)
+	for i, share := range shares {
+		withdrawalHex, err := eth2util.ChecksumAddress(withdrawalAddresses[i])
+		if err != nil {
+			return nil, nil, err
+		}
+		pubkey, err := tblsconv.PubkeyToETH2(share.PubKey)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		pk, err := core.PubKeyFromBytes(share.PubKey[:])
+		if err != nil {
+			return nil, nil, err
+		}
+
+		msg, err := deposit.NewMessage2(pubkey, withdrawalHex) //GVNewMessage2
 		if err != nil {
 			return nil, nil, err
 		}
@@ -722,6 +793,89 @@ func signValidatorRegistrations(shares []share, shareIdx int, feeRecipients []st
 
 // aggDepositData returns the threshold aggregated deposit datas per DV.
 func aggDepositData(data map[core.PubKey][]core.ParSignedData, shares []share,
+	msgs map[core.PubKey]eth2p0.DepositMessage, network string,
+) ([]eth2p0.DepositData, error) {
+	pubkeyToPubShares := make(map[core.PubKey]map[int]tbls.PublicKey)
+	for _, sh := range shares {
+		pk, err := core.PubKeyFromBytes(sh.PubKey[:])
+		if err != nil {
+			return nil, err
+		}
+
+		pubkeyToPubShares[pk] = sh.PublicShares
+	}
+
+	var resp []eth2p0.DepositData
+
+	for pk, psigsData := range data {
+		pk := pk
+		psigsData := psigsData
+
+		msg, ok := msgs[pk]
+		if !ok {
+			return nil, errors.New("deposit message not found")
+		}
+		sigRoot, err := deposit.GetMessageSigningRoot(msg, network)
+		if err != nil {
+			return nil, err
+		}
+
+		psigs := make(map[int]tbls.Signature)
+		for _, s := range psigsData {
+			sig, err := tblsconv.SignatureFromBytes(s.Signature())
+			if err != nil {
+				return nil, errors.Wrap(err, "signature from core")
+			}
+
+			pubshares, ok := pubkeyToPubShares[pk]
+			if !ok {
+				return nil, errors.New("invalid pubkey in deposit data partial signature from peer",
+					z.Int("peerIdx", s.ShareIdx-1), // peerIdx is 0-indexed while shareIdx is 1-indexed
+					z.Str("pubkey", pk.String()))
+			}
+
+			pubshare, ok := pubshares[s.ShareIdx]
+			if !ok {
+				return nil, errors.New("invalid pubshare")
+			}
+
+			err = tbls.Verify(pubshare, sigRoot[:], sig)
+			if err != nil {
+				return nil, errors.New("invalid deposit data partial signature from peer",
+					z.Int("peerIdx", s.ShareIdx-1), z.Str("pubkey", pk.String()))
+			}
+
+			psigs[s.ShareIdx] = sig
+		}
+
+		// Aggregate signatures per DV
+		asig, err := tbls.ThresholdAggregate(psigs)
+		if err != nil {
+			return nil, err
+		}
+
+		pubkey, err := tblsconv.PubkeyFromCore(pk)
+		if err != nil {
+			return nil, err
+		}
+
+		err = tbls.Verify(pubkey, sigRoot[:], asig)
+		if err != nil {
+			return nil, errors.Wrap(err, "invalid deposit data aggregated signature")
+		}
+
+		resp = append(resp, eth2p0.DepositData{
+			PublicKey:             msg.PublicKey,
+			WithdrawalCredentials: msg.WithdrawalCredentials,
+			Amount:                msg.Amount,
+			Signature:             tblsconv.SigToETH2(asig),
+		})
+	}
+
+	return resp, nil
+}
+
+func aggDepositData2(data map[core.PubKey][]core.ParSignedData, shares []share,
 	msgs map[core.PubKey]eth2p0.DepositMessage, network string,
 ) ([]eth2p0.DepositData, error) {
 	pubkeyToPubShares := make(map[core.PubKey]map[int]tbls.PublicKey)

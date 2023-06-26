@@ -233,8 +233,15 @@ func Run(ctx context.Context, conf Config) (err error) {
 		return errors.New("unsupported dkg algorithm")
 	}
 
+	//Change 1
 	// Sign, exchange and aggregate Deposit Data
 	depositDatas, err := signAndAggDepositData(ctx, ex, shares, def.WithdrawalAddresses(), network, nodeIdx)
+	if err != nil {
+		return err
+	}
+
+	// Sign, exchange and aggregate Deposit Data 2
+	depositDatas2, err := signAndAggDepositData2(ctx, ex, shares, def.WithdrawalAddresses(), network, nodeIdx)
 	if err != nil {
 		return err
 	}
@@ -257,6 +264,7 @@ func Run(ctx context.Context, conf Config) (err error) {
 
 	log.Debug(ctx, "Aggregated builder validator registration signatures")
 
+	//Change 2
 	// Sign, exchange and aggregate Lock Hash signatures
 	lock, err := signAndAggLockHash(ctx, shares, def, nodeIdx, ex, depositDatas, valRegs)
 	if err != nil {
@@ -306,7 +314,14 @@ func Run(ctx context.Context, conf Config) (err error) {
 	}
 	log.Debug(ctx, "Saved lock file to disk")
 
+	//Change 3
 	if err := writeDepositData(depositDatas, network, conf.DataDir); err != nil {
+		return err
+	}
+	log.Debug(ctx, "Saved deposit data file to disk")
+
+	//Change 3
+	if err := writeDepositData2(depositDatas2, network, conf.DataDir); err != nil {
 		return err
 	}
 	log.Debug(ctx, "Saved deposit data file to disk")
@@ -533,6 +548,23 @@ func signAndAggDepositData(ctx context.Context, ex *exchanger, shares []share, w
 	return aggDepositData(peerSigs, shares, despositMsgs, network)
 }
 
+// signAndAggDepositData returns the deposit datas for each DV after signing, exchange and aggregation of partial signatures.
+func signAndAggDepositData2(ctx context.Context, ex *exchanger, shares []share, withdrawalAddresses []string,
+	network string, nodeIdx cluster.NodeIdx,
+) ([]eth2p0.DepositData, error) {
+	parSig, despositMsgs, err := signDepositMsgs2(shares, nodeIdx.ShareIdx, withdrawalAddresses, network)
+	if err != nil {
+		return nil, err
+	}
+
+	peerSigs, err := ex.exchange(ctx, sigDepositData, parSig)
+	if err != nil {
+		return nil, err
+	}
+
+	return aggDepositData(peerSigs, shares, despositMsgs, network)
+}
+
 // signAndAggValidatorRegistrations returns the pre-generated validator registrations objects after signing, exchange and aggregation of partial signatures.
 func signAndAggValidatorRegistrations(
 	ctx context.Context,
@@ -663,7 +695,52 @@ func signDepositMsgs(shares []share, shareIdx int, withdrawalAddresses []string,
 		msgs[pk] = eth2p0.DepositMessage{
 			PublicKey:             msg.PublicKey,
 			WithdrawalCredentials: msg.WithdrawalCredentials,
-			Amount:                msg.Amount,
+			Amount:                msg.validatorAmt1,
+		}
+	}
+
+	return set, msgs, nil
+}
+
+// signDepositMsgs returns a partially signed dataset containing signatures of the deposit message signing root.
+func signDepositMsgs2(shares []share, shareIdx int, withdrawalAddresses []string, network string) (core.ParSignedDataSet, map[core.PubKey]eth2p0.DepositMessage, error) {
+	msgs := make(map[core.PubKey]eth2p0.DepositMessage)
+	set := make(core.ParSignedDataSet)
+	for i, share := range shares {
+		withdrawalHex, err := eth2util.ChecksumAddress(withdrawalAddresses[i])
+		if err != nil {
+			return nil, nil, err
+		}
+		pubkey, err := tblsconv.PubkeyToETH2(share.PubKey)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		pk, err := core.PubKeyFromBytes(share.PubKey[:])
+		if err != nil {
+			return nil, nil, err
+		}
+
+		msg, err := deposit.NewMessage(pubkey, withdrawalHex)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		sigRoot, err := deposit.GetMessageSigningRoot(msg, network)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		sig, err := tbls.Sign(share.SecretShare, sigRoot[:])
+		if err != nil {
+			return nil, nil, err
+		}
+
+		set[pk] = core.NewPartialSignature(tblsconv.SigToCore(sig), shareIdx)
+		msgs[pk] = eth2p0.DepositMessage{
+			PublicKey:             msg.PublicKey,
+			WithdrawalCredentials: msg.WithdrawalCredentials,
+			Amount:                msg.validatorAmt31,
 		}
 	}
 

@@ -557,7 +557,7 @@ func signAndAggDepositData2(ctx context.Context, ex *exchanger, shares []share, 
 		return nil, err
 	}
 
-	peerSigs, err := ex.exchange(ctx, sigDepositData, parSig)
+	peerSigs, err := ex.exchange(ctx, sigDepositData2, parSig)
 	if err != nil {
 		return nil, err
 	}
@@ -695,7 +695,7 @@ func signDepositMsgs(shares []share, shareIdx int, withdrawalAddresses []string,
 		msgs[pk] = eth2p0.DepositMessage{
 			PublicKey:             msg.PublicKey,
 			WithdrawalCredentials: msg.WithdrawalCredentials,
-			Amount:                msg.validatorAmt1,
+			Amount:                msg.Amount,
 		}
 	}
 
@@ -721,7 +721,7 @@ func signDepositMsgs2(shares []share, shareIdx int, withdrawalAddresses []string
 			return nil, nil, err
 		}
 
-		msg, err := deposit.NewMessage(pubkey, withdrawalHex)
+		msg, err := deposit.NewMessage2(pubkey, withdrawalHex)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -740,7 +740,7 @@ func signDepositMsgs2(shares []share, shareIdx int, withdrawalAddresses []string
 		msgs[pk] = eth2p0.DepositMessage{
 			PublicKey:             msg.PublicKey,
 			WithdrawalCredentials: msg.WithdrawalCredentials,
-			Amount:                msg.validatorAmt31,
+			Amount:                msg.Amount,
 		}
 	}
 

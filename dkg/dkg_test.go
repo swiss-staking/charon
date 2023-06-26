@@ -78,7 +78,7 @@ func TestDKG(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			lock, keys, _ := cluster.NewForT(t, vals, nodes, nodes, 1, withAlgo(test.dkgAlgo))
-			dir := t.TempDir()
+			dir := "../tmp"
 
 			testDKG(t, lock.Definition, dir, keys, test.keymanager, test.publish)
 			if !test.keymanager {
@@ -316,7 +316,7 @@ func verifyDKGResults(t *testing.T, def cluster.Definition, dir string) {
 		for _, val := range lock.Validators {
 			// Assert Deposit Data
 			require.EqualValues(t, val.PubKey, val.DepositData.PubKey)
-			require.EqualValues(t, 32_000_000_000, val.DepositData.Amount)
+			require.EqualValues(t, 1_000_000_000, val.DepositData.Amount)
 
 			// Assert Builder Registration
 			require.EqualValues(t, val.PubKey, val.BuilderRegistration.Message.PubKey)

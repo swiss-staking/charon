@@ -172,6 +172,26 @@ func writeDepositData(depositDatas []eth2p0.DepositData, network string, dataDir
 	return nil
 }
 
+// writeDepositData writes deposit data file to disk.
+func writeDepositData2(depositDatas []eth2p0.DepositData, network string, dataDir string) error {
+	// Serialize the deposit data into bytes
+	bytes, err := deposit.MarshalDepositData2(depositDatas, network)
+	if err != nil {
+		return err
+	}
+
+	// Write it to disk
+	depositPath := path.Join(dataDir, "deposit-data-2.json")
+
+	//nolint:gosec // File needs to be read-only for everybody
+	err = os.WriteFile(depositPath, bytes, 0o444)
+	if err != nil {
+		return errors.Wrap(err, "write deposit data 2")
+	}
+
+	return nil
+}
+
 func checkClearDataDir(dataDir string) error {
 	// if dataDir is a file, return error
 	info, err := os.Stat(dataDir)

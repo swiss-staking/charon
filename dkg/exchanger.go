@@ -27,6 +27,9 @@ const (
 	sigDepositData sigType = 102
 	// sigValidatorRegistration is responsible for the pre-generated validator registration exchange and aggregation.
 	sigValidatorRegistration sigType = 103
+
+	// dutyDepositData is responsible for deposit data signed partial signatures exchange and aggregation.
+	sigDepositData2 sigType = 104
 )
 
 // sigData includes the fields obtained from sigdb when threshold is reached.

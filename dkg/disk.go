@@ -153,15 +153,15 @@ func writeLock(datadir string, lock cluster.Lock) error {
 }
 
 // writeDepositData writes deposit data file to disk.
-func writeDepositData(depositDatas []eth2p0.DepositData, network string, dataDir string) error {
+func writeDepositData(depositDatas []eth2p0.DepositData, network string, dataDir string, validatorAmt eth2p0.Gwei, fileName string) error {
 	// Serialize the deposit data into bytes
-	bytes, err := deposit.MarshalDepositData(depositDatas, network)
+	bytes, err := deposit.MarshalDepositData(depositDatas, network, validatorAmt)
 	if err != nil {
 		return err
 	}
 
 	// Write it to disk
-	depositPath := path.Join(dataDir, "deposit-data.json")
+	depositPath := path.Join(dataDir, fileName)
 
 	//nolint:gosec // File needs to be read-only for everybody
 	err = os.WriteFile(depositPath, bytes, 0o444)

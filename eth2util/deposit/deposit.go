@@ -22,9 +22,6 @@ var (
 	// https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/validator.md#eth1_address_withdrawal_prefix
 	eth1AddressWithdrawalPrefix = []byte{0x01}
 
-	// the amount of ether in gwei required to activate a validator.
-	validatorAmt = eth2p0.Gwei(32000000000)
-
 	// DOMAIN_DEPOSIT. See spec: https://benjaminion.xyz/eth2-annotated-spec/phase0/beacon-chain/#domain-types
 	depositDomainType = eth2p0.DomainType([4]byte{0x03, 0x00, 0x00, 0x00})
 
@@ -32,7 +29,7 @@ var (
 )
 
 // NewMessage returns a deposit message created using the provided parameters.
-func NewMessage(pubkey eth2p0.BLSPubKey, withdrawalAddr string) (eth2p0.DepositMessage, error) {
+func NewMessage(pubkey eth2p0.BLSPubKey, withdrawalAddr string, validatorAmt eth2p0.Gwei) (eth2p0.DepositMessage, error) {
 	creds, err := withdrawalCredsFromAddr(withdrawalAddr)
 	if err != nil {
 		return eth2p0.DepositMessage{}, err
@@ -46,7 +43,7 @@ func NewMessage(pubkey eth2p0.BLSPubKey, withdrawalAddr string) (eth2p0.DepositM
 }
 
 // MarshalDepositData serializes a list of deposit data into a single file.
-func MarshalDepositData(depositDatas []eth2p0.DepositData, network string) ([]byte, error) {
+func MarshalDepositData(depositDatas []eth2p0.DepositData, network string, validatorAmt eth2p0.Gwei) ([]byte, error) {
 	forkVersion, err := eth2util.NetworkToForkVersion(network)
 	if err != nil {
 		return nil, err

@@ -184,7 +184,12 @@ func runAddValidatorsSolo(ctx context.Context, conf addValidatorsConfig) (err er
 		return err
 	}
 
-	err = writeDepositDatas(ctx, conf.ClusterDir, len(cluster.Operators), secrets, vals, cluster.ForkVersion)
+	err = writeDepositDatas(ctx, conf.ClusterDir, len(cluster.Operators), secrets, vals, cluster.ForkVersion, 1000000000, "deposit-data")
+	if err != nil {
+		return err
+	}
+
+	err = writeDepositDatas(ctx, conf.ClusterDir, len(cluster.Operators), secrets, vals, cluster.ForkVersion, 31000000000, "deposit-data-2")
 	if err != nil {
 		return err
 	}
@@ -236,7 +241,7 @@ func builderRegistration(secret tbls.PrivateKey, pubkey tbls.PublicKey, feeRecip
 }
 
 // writeDepositDatas creates deposit data for each validator and writes the deposit data to disk for each node.
-func writeDepositDatas(ctx context.Context, clusterDir string, numOps int, secrets []tbls.PrivateKey, vals []*manifestpb.Validator, forkVersion []byte) error {
+func writeDepositDatas(ctx context.Context, clusterDir string, numOps int, secrets []tbls.PrivateKey, vals []*manifestpb.Validator, forkVersion []byte, validatorAmt eth2p0.Gwei, fileName string) error {
 	network, err := eth2util.ForkVersionToNetwork(forkVersion)
 	if err != nil {
 		return errors.Wrap(err, "fork version to network")
@@ -244,7 +249,7 @@ func writeDepositDatas(ctx context.Context, clusterDir string, numOps int, secre
 
 	var depositDatas []eth2p0.DepositData
 	for i, val := range vals {
-		depositMsg, err := deposit.NewMessage(eth2p0.BLSPubKey(val.PublicKey), val.WithdrawalAddress)
+		depositMsg, err := deposit.NewMessage(eth2p0.BLSPubKey(val.PublicKey), val.WithdrawalAddress, validatorAmt)
 		if err != nil {
 			return errors.Wrap(err, "new deposit message")
 		}
@@ -268,13 +273,13 @@ func writeDepositDatas(ctx context.Context, clusterDir string, numOps int, secre
 	}
 
 	// Serialize the deposit data into bytes
-	bytes, err := deposit.MarshalDepositData(depositDatas, network)
+	bytes, err := deposit.MarshalDepositData(depositDatas, network, validatorAmt)
 	if err != nil {
 		return err
 	}
 
 	currTime := time.Now().Format("20060102150405")
-	filename := fmt.Sprintf("deposit-data-%s.json", currTime) // Ex: "deposit-data-20060102150405.json"
+	filename := fmt.Sprintf("%s-%s.json", fileName, currTime) // Ex: "deposit-data-20060102150405.json"
 	for i := 0; i < numOps; i++ {
 		depositPath := filepath.Join(nodeDir(clusterDir, i), filename)
 		//nolint:gosec // File needs to be read-only for everybody

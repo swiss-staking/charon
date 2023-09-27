@@ -39,7 +39,7 @@ func TestMarshalDepositData(t *testing.T) {
 	for i := 0; i < len(privKeys); i++ {
 		sk, pk := GetKeys(t, privKeys[i])
 
-		msg, err := deposit.NewMessage(pk, withdrawalAddrs[i])
+		msg, err := deposit.NewMessage(pk, withdrawalAddrs[i], 32000000000)
 		require.NoError(t, err)
 
 		sigRoot, err := deposit.GetMessageSigningRoot(msg, network)
@@ -56,7 +56,7 @@ func TestMarshalDepositData(t *testing.T) {
 		})
 	}
 
-	actual, err := deposit.MarshalDepositData(datas, network)
+	actual, err := deposit.MarshalDepositData(datas, network, 32000000000)
 	require.NoError(t, err)
 
 	testutil.RequireGoldenBytes(t, actual)

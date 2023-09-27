@@ -31,6 +31,8 @@ const (
 	sigDepositData sigType = 102
 	// sigValidatorRegistration is responsible for the pre-generated validator registration exchange and aggregation.
 	sigValidatorRegistration sigType = 103
+
+	sigDepositDataRocketPool sigType = 104
 )
 
 // sigTypeStore is a shorthand for a map of sigType to map of core.PubKey to slice of core.ParSignedData.

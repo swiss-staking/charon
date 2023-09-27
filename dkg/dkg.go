@@ -249,7 +249,13 @@ func Run(ctx context.Context, conf Config) (err error) {
 	}
 
 	// Sign, exchange and aggregate Deposit Data
-	depositDatas, err := signAndAggDepositData(ctx, ex, shares, def.WithdrawalAddresses(), network, nodeIdx)
+	depositDatas, err := signAndAggDepositData(ctx, ex, shares, def.WithdrawalAddresses(), network, nodeIdx, 1000000000, sigDepositData)
+	if err != nil {
+		return err
+	}
+
+	// Sign, exchange and aggregate Deposit Data
+	depositDatasRocketPool, err := signAndAggDepositData(ctx, ex, shares, def.WithdrawalAddresses(), network, nodeIdx, 31000000000, sigDepositData)
 	if err != nil {
 		return err
 	}
@@ -345,7 +351,12 @@ func Run(ctx context.Context, conf Config) (err error) {
 	}
 	log.Debug(ctx, "Saved lock file to disk")
 
-	if err := writeDepositData(depositDatas, network, conf.DataDir); err != nil {
+	if err := writeDepositData(depositDatas, network, conf.DataDir, 1000000000, "deposit-data.json"); err != nil {
+		return err
+	}
+	log.Debug(ctx, "Saved deposit data file to disk")
+
+	if err := writeDepositData(depositDatasRocketPool, network, conf.DataDir, 31000000000, "deposit-data-2.json"); err != nil {
 		return err
 	}
 	log.Debug(ctx, "Saved deposit data file to disk")
@@ -600,14 +611,13 @@ func signAndAggLockHash(ctx context.Context, shares []share, def cluster.Definit
 
 // signAndAggDepositData returns the deposit datas for each DV after signing, exchange and aggregation of partial signatures.
 func signAndAggDepositData(ctx context.Context, ex *exchanger, shares []share, withdrawalAddresses []string,
-	network string, nodeIdx cluster.NodeIdx,
-) ([]eth2p0.DepositData, error) {
-	parSig, despositMsgs, err := signDepositMsgs(shares, nodeIdx.ShareIdx, withdrawalAddresses, network)
+	network string, nodeIdx cluster.NodeIdx, validatorAmt eth2p0.Gwei, sig sigType) ([]eth2p0.DepositData, error) {
+	parSig, despositMsgs, err := signDepositMsgs(shares, nodeIdx.ShareIdx, withdrawalAddresses, network, validatorAmt)
 	if err != nil {
 		return nil, err
 	}
 
-	peerSigs, err := ex.exchange(ctx, sigDepositData, parSig)
+	peerSigs, err := ex.exchange(ctx, sig, parSig)
 	if err != nil {
 		return nil, err
 	}
@@ -708,7 +718,7 @@ func signLockHash(shareIdx int, shares []share, hash []byte) (core.ParSignedData
 }
 
 // signDepositMsgs returns a partially signed dataset containing signatures of the deposit message signing root.
-func signDepositMsgs(shares []share, shareIdx int, withdrawalAddresses []string, network string) (core.ParSignedDataSet, map[core.PubKey]eth2p0.DepositMessage, error) {
+func signDepositMsgs(shares []share, shareIdx int, withdrawalAddresses []string, network string, validatorAmt eth2p0.Gwei) (core.ParSignedDataSet, map[core.PubKey]eth2p0.DepositMessage, error) {
 	msgs := make(map[core.PubKey]eth2p0.DepositMessage)
 	set := make(core.ParSignedDataSet)
 	for i, share := range shares {
@@ -726,7 +736,7 @@ func signDepositMsgs(shares []share, shareIdx int, withdrawalAddresses []string,
 			return nil, nil, err
 		}
 
-		msg, err := deposit.NewMessage(pubkey, withdrawalHex)
+		msg, err := deposit.NewMessage(pubkey, withdrawalHex, validatorAmt)
 		if err != nil {
 			return nil, nil, err
 		}

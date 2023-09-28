@@ -188,6 +188,7 @@ func Run(ctx context.Context, conf Config) (err error) {
 		sigLock,
 		sigDepositData,
 		sigValidatorRegistration,
+		sigDepositDataRocketPool,
 	})
 
 	// Register Frost libp2p handlers

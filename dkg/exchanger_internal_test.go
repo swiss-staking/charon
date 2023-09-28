@@ -63,6 +63,7 @@ func TestExchanger(t *testing.T) {
 			sigLock,
 			sigDepositData,
 			sigValidatorRegistration,
+			sigDepositDataRocketPool,
 		}
 	)
 
@@ -104,7 +105,7 @@ func TestExchanger(t *testing.T) {
 	// send multiple (supported) messages at the same time, showing that exchanger can exchange messages of various
 	// sigTypes concurrently
 	for i := 0; i < nodes; i++ {
-		wg.Add(2)
+		wg.Add(3)
 		go func(node int) {
 			defer wg.Done()
 
@@ -125,6 +126,17 @@ func TestExchanger(t *testing.T) {
 			respChan <- respStruct{
 				data:    data,
 				sigType: sigValidatorRegistration,
+			}
+		}(i)
+		go func(node int) {
+			defer wg.Done()
+
+			data, err := exchangers[node].exchange(ctx, sigDepositDataRocketPool, dataToBeSent[node])
+			require.NoError(t, err)
+
+			respChan <- respStruct{
+				data:    data,
+				sigType: sigDepositDataRocketPool,
 			}
 		}(i)
 	}

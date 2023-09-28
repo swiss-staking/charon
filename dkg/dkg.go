@@ -255,7 +255,7 @@ func Run(ctx context.Context, conf Config) (err error) {
 	}
 
 	// Sign, exchange and aggregate Deposit Data
-	depositDatasRocketPool, err := signAndAggDepositData(ctx, ex, shares, def.WithdrawalAddresses(), network, nodeIdx, 31000000000, sigDepositData)
+	depositDatasRocketPool, err := signAndAggDepositData(ctx, ex, shares, def.WithdrawalAddresses(), network, nodeIdx, 31000000000, sigDepositDataRocketPool)
 	if err != nil {
 		return err
 	}

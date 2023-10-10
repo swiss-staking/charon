@@ -72,5 +72,5 @@ func bindShutdownDelayFlag(flags *pflag.FlagSet, shutdownDelay *time.Duration) {
 }
 
 func bindRocketPoolFlag(flags *pflag.FlagSet, config *dkg.Config) {
-	flags.BoolVar(&config.Publish, "rocketpool", false, "DKG for rocketpool validator")
+	flags.BoolVar(&config.RocketPool, "rocketpool", false, "DKG for rocketpool validator")
 }

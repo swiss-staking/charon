@@ -42,6 +42,7 @@ type Config struct {
 	DefFile       string
 	NoVerify      bool
 	DataDir       string
+	RocketPool    bool
 	P2P           p2p.Config
 	Log           log.Config
 	ShutdownDelay time.Duration
@@ -184,12 +185,22 @@ func Run(ctx context.Context, conf Config) (err error) {
 		return errors.Wrap(err, "get peer IDs")
 	}
 
-	ex := newExchanger(tcpNode, nodeIdx.PeerIdx, peerIds, def.NumValidators, []sigType{
-		sigLock,
-		sigDepositData,
-		sigValidatorRegistration,
-		sigDepositDataRocketPool,
-	})
+	var ex *exchanger
+
+	if conf.RocketPool {
+		ex = newExchanger(tcpNode, nodeIdx.PeerIdx, peerIds, def.NumValidators, []sigType{
+			sigLock,
+			sigDepositData,
+			sigValidatorRegistration,
+			sigDepositDataRocketPool,
+		})
+	} else {
+		ex = newExchanger(tcpNode, nodeIdx.PeerIdx, peerIds, def.NumValidators, []sigType{
+			sigLock,
+			sigDepositData,
+			sigValidatorRegistration,
+		})
+	}
 
 	// Register Frost libp2p handlers
 	peerMap := make(map[peer.ID]cluster.NodeIdx)
@@ -249,16 +260,27 @@ func Run(ctx context.Context, conf Config) (err error) {
 		return err
 	}
 
-	// Sign, exchange and aggregate Deposit Data
-	depositDatas, err := signAndAggDepositData(ctx, ex, shares, def.WithdrawalAddresses(), network, nodeIdx, 1000000000, sigDepositData)
-	if err != nil {
-		return err
-	}
+	var depositDatas []eth2p0.DepositData
+	var depositDatasRocketPool []eth2p0.DepositData
 
-	// Sign, exchange and aggregate Deposit Data
-	depositDatasRocketPool, err := signAndAggDepositData(ctx, ex, shares, def.WithdrawalAddresses(), network, nodeIdx, 31000000000, sigDepositDataRocketPool)
-	if err != nil {
-		return err
+	if conf.RocketPool {
+		// Sign, exchange and aggregate Deposit Data
+		depositDatas, err = signAndAggDepositData(ctx, ex, shares, def.WithdrawalAddresses(), network, nodeIdx, 1000000000, sigDepositData)
+		if err != nil {
+			return err
+		}
+
+		// Sign, exchange and aggregate Deposit Data
+		depositDatasRocketPool, err = signAndAggDepositData(ctx, ex, shares, def.WithdrawalAddresses(), network, nodeIdx, 31000000000, sigDepositDataRocketPool)
+		if err != nil {
+			return err
+		}
+	} else {
+		// Sign, exchange and aggregate Deposit Data
+		depositDatas, err = signAndAggDepositData(ctx, ex, shares, def.WithdrawalAddresses(), network, nodeIdx, 32000000000, sigDepositData)
+		if err != nil {
+			return err
+		}
 	}
 
 	log.Debug(ctx, "Aggregated deposit data signatures")
@@ -352,15 +374,22 @@ func Run(ctx context.Context, conf Config) (err error) {
 	}
 	log.Debug(ctx, "Saved lock file to disk")
 
-	if err := writeDepositData(depositDatas, network, conf.DataDir, 1000000000, "deposit-data.json"); err != nil {
-		return err
-	}
-	log.Debug(ctx, "Saved deposit data file to disk")
+	if conf.RocketPool {
+		if err := writeDepositData(depositDatas, network, conf.DataDir, 1000000000, "deposit-data.json"); err != nil {
+			return err
+		}
+		log.Debug(ctx, "Saved deposit data file to disk")
 
-	if err := writeDepositData(depositDatasRocketPool, network, conf.DataDir, 31000000000, "deposit-data-2.json"); err != nil {
-		return err
+		if err := writeDepositData(depositDatasRocketPool, network, conf.DataDir, 31000000000, "deposit-data-2.json"); err != nil {
+			return err
+		}
+		log.Debug(ctx, "Saved deposit data file to disk")
+	} else {
+		if err := writeDepositData(depositDatas, network, conf.DataDir, 32000000000, "deposit-data.json"); err != nil {
+			return err
+		}
+		log.Debug(ctx, "Saved deposit data file to disk")
 	}
-	log.Debug(ctx, "Saved deposit data file to disk")
 
 	// Signature verification and disk key write was step 6, advance to step 7
 	if err := nextStepSync(ctx); err != nil {

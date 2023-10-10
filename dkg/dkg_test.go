@@ -55,6 +55,7 @@ func TestDKG(t *testing.T) {
 		version    string // Defaults to latest if empty
 		keymanager bool
 		publish    bool
+		rocketpool bool
 	}{
 		{
 			name:    "keycast",
@@ -79,6 +80,34 @@ func TestDKG(t *testing.T) {
 			dkgAlgo: "frost",
 			publish: true,
 		},
+		{
+			name:       "keycast",
+			dkgAlgo:    "keycast",
+			rocketpool: true,
+		},
+		{
+			name:       "frost_v16",
+			version:    "v1.6.0",
+			dkgAlgo:    "frost",
+			rocketpool: true,
+		},
+		{
+			name:       "frost_latest",
+			dkgAlgo:    "frost",
+			rocketpool: true,
+		},
+		{
+			name:       "dkg with keymanager",
+			dkgAlgo:    "frost",
+			keymanager: true,
+			rocketpool: true,
+		},
+		{
+			name:       "dkg with lockfile publish",
+			dkgAlgo:    "frost",
+			publish:    true,
+			rocketpool: true,
+		},
 	}
 
 	for _, test := range tests {
@@ -93,15 +122,15 @@ func TestDKG(t *testing.T) {
 			lock, keys, _ := cluster.NewForT(t, vals, nodes, nodes, 1, opts...)
 			dir := t.TempDir()
 
-			testDKG(t, lock.Definition, dir, keys, test.keymanager, test.publish)
+			testDKG(t, lock.Definition, dir, keys, test.keymanager, test.publish, test.rocketpool)
 			if !test.keymanager {
-				verifyDKGResults(t, lock.Definition, dir)
+				verifyDKGResults(t, lock.Definition, dir, test.rocketpool)
 			}
 		})
 	}
 }
 
-func testDKG(t *testing.T, def cluster.Definition, dir string, p2pKeys []*k1.PrivateKey, keymanager bool, publish bool) {
+func testDKG(t *testing.T, def cluster.Definition, dir string, p2pKeys []*k1.PrivateKey, keymanager bool, publish bool, rocketpool bool) {
 	t.Helper()
 
 	require.NoError(t, def.VerifySignatures())
@@ -129,6 +158,7 @@ func testDKG(t *testing.T, def cluster.Definition, dir string, p2pKeys []*k1.Pri
 			ShutdownCallback: shutdownSync,
 			SyncOpts:         []func(*dkgsync.Client){dkgsync.WithPeriod(time.Millisecond * 50)},
 		},
+		RocketPool: rocketpool,
 	}
 
 	allReceivedKeystores := make(chan struct{}) // Receives struct{} for each `numNodes` keystore intercepted by the keymanager server
@@ -298,7 +328,7 @@ func startRelay(parentCtx context.Context, t *testing.T) string {
 	}
 }
 
-func verifyDKGResults(t *testing.T, def cluster.Definition, dir string) {
+func verifyDKGResults(t *testing.T, def cluster.Definition, dir string, rocketpool bool) {
 	t.Helper()
 
 	// Read generated lock and keystores from disk
@@ -330,7 +360,12 @@ func verifyDKGResults(t *testing.T, def cluster.Definition, dir string) {
 		for j, val := range lock.Validators {
 			// Assert Deposit Data
 			require.EqualValues(t, val.PubKey, val.DepositData.PubKey)
-			require.EqualValues(t, 1_000_000_000, val.DepositData.Amount)
+
+			if rocketpool {
+				require.EqualValues(t, 1_000_000_000, val.DepositData.Amount)
+			} else {
+				require.EqualValues(t, 32_000_000_000, val.DepositData.Amount)
+			}
 
 			if !cluster.SupportPregenRegistrations(lock.Version) {
 				require.Empty(t, val.BuilderRegistration.Signature)
@@ -514,7 +549,7 @@ func TestSyncFlow(t *testing.T) {
 			}
 
 			// Assert DKG results for all DKG processes.
-			verifyDKGResults(t, lock.Definition, dir)
+			verifyDKGResults(t, lock.Definition, dir, false)
 		})
 	}
 }

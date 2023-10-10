@@ -44,6 +44,7 @@ this command at the same time.`,
 	bindLogFlags(cmd.Flags(), &config.Log)
 	bindPublishFlags(cmd.Flags(), &config)
 	bindShutdownDelayFlag(cmd.Flags(), &config.ShutdownDelay)
+	bindRocketPoolDelayFlag(cmd.Flags(), &config)
 
 	return cmd
 }
@@ -68,4 +69,8 @@ func bindPublishFlags(flags *pflag.FlagSet, config *dkg.Config) {
 
 func bindShutdownDelayFlag(flags *pflag.FlagSet, shutdownDelay *time.Duration) {
 	flags.DurationVar(shutdownDelay, "shutdown-delay", time.Second, "Graceful shutdown delay.")
+}
+
+func bindRocketPoolDelayFlag(flags *pflag.FlagSet, config *dkg.Config) {
+	flags.BoolVar(&config.Publish, "rocketpool", false, "DKG for rocketpool validator")
 }
